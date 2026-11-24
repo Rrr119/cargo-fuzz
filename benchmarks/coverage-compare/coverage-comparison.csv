@@ -1,0 +1,10 @@
+crate,strategy,lines_covered,lines_total,line_percent,regions_covered,regions_total,region_percent
+route_lite,baseline,86,194,44.33,96,224,42.86
+route_lite,dictionary,92,194,47.42,103,224,45.98
+route_lite,structured,166,194,85.57,188,224,83.93
+kv_record,baseline,72,159,45.28,83,223,37.22
+kv_record,dictionary,88,159,55.35,105,223,47.09
+kv_record,structured,123,159,77.36,159,223,71.30
+tag_lite,baseline,53,140,37.86,59,177,33.33
+tag_lite,dictionary,101,140,72.14,115,177,64.97
+tag_lite,structured,119,140,85.00,150,177,84.75

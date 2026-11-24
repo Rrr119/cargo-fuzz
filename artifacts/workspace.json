@@ -1,0 +1,17 @@
+{
+  "root": "/home/dev/feedback/uid36780",
+  "B": "/home/dev/feedback/uid36780",
+  "sha": "52cc6d92cd5e31ce5cf98c0b6ac035a2761e3af5",
+  "wslDistro": "Ubuntu-26.04",
+  "source": {
+    "owner": "rust-fuzz",
+    "repo": "cargo-fuzz",
+    "sha": "52cc6d92cd5e31ce5cf98c0b6ac035a2761e3af5"
+  },
+  "fork": {
+    "owner": "Rrr119",
+    "repo": "cargo-fuzz",
+    "cloneUrl": "https://github.com/Rrr119/cargo-fuzz.git"
+  },
+  "at": "2026-11-24T16:01:35.842Z"
+}

@@ -1105,3 +1105,282 @@ fn options_passed_to_rustc() {
 
     fs::remove_file(&a_bin).unwrap();
 }
+
+#[test]
+fn dictionary_import_list_and_generate_seeds() {
+    let schema = Path::new("schemas").join("parser.toml");
+    let project = project("dictionary_generate")
+        .with_fuzz()
+        .file("words.txt", "alpha\nalpha\nbeta\n# ignored\n")
+        .file(
+            &schema,
+            r#"
+                name = "ParserInput"
+                template = "{keyword}:{mode}\n"
+
+                [[fields]]
+                name = "keyword"
+                choices = ["open", "close"]
+
+                [[fields]]
+                name = "mode"
+                tokens = ["fast", "safe"]
+            "#,
+        )
+        .build();
+
+    project
+        .cargo_fuzz()
+        .arg("dict")
+        .arg("import")
+        .arg("words.txt")
+        .arg("parser_target")
+        .arg("--format=word-list")
+        .arg("--print")
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("token_0001=\"alpha\"")
+                .and(predicate::str::contains("token_0002=\"beta\"")),
+        );
+
+    let dictionary = project
+        .fuzz_dir()
+        .join("dictionaries")
+        .join("parser_target.dict");
+    assert!(dictionary.is_file());
+
+    project
+        .cargo_fuzz()
+        .arg("dict")
+        .arg("list")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("parser_target.dict"));
+
+    project
+        .cargo_fuzz()
+        .arg("generate")
+        .arg("seeds")
+        .arg("parser_target")
+        .arg("--schema")
+        .arg(&schema)
+        .arg("--count=4")
+        .arg("--write-dictionary")
+        .assert()
+        .success();
+
+    let corpus = project.fuzz_dir().join("corpus").join("parser_target");
+    assert_eq!(
+        fs::read_dir(&corpus).unwrap().count(),
+        4,
+        "four structured seeds should be generated"
+    );
+    let seed0 = fs::read_to_string(corpus.join("structured-0000")).unwrap();
+    assert_eq!(seed0, "open:fast\n");
+    let seed1 = fs::read_to_string(corpus.join("structured-0001")).unwrap();
+    assert_eq!(seed1, "close:safe\n");
+
+    let schema_dictionary = fs::read_to_string(&dictionary).unwrap();
+    assert!(schema_dictionary.contains("keyword_0=\"open\""));
+    assert!(schema_dictionary.contains("mode_3=\"safe\""));
+
+    project
+        .cargo_fuzz()
+        .arg("generate")
+        .arg("flat_target")
+        .arg("--schema")
+        .arg(&schema)
+        .arg("--count=2")
+        .assert()
+        .success();
+    assert_eq!(
+        fs::read_dir(project.fuzz_dir().join("corpus").join("flat_target"))
+            .unwrap()
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn add_structured_target_runs_with_libfuzzer() {
+    let project = project("add_structured_target").with_fuzz().build();
+
+    project
+        .cargo_fuzz()
+        .arg("add")
+        .arg("--structured")
+        .arg("structured_input")
+        .assert()
+        .success();
+
+    let target = project.fuzz_target_path("structured_input");
+    let code = fs::read_to_string(&target).unwrap();
+    assert!(code.contains("struct StructuredInput"));
+    assert!(code.contains("impl<'a> Arbitrary<'a>"));
+    assert!(code.contains("fuzz_target!(|input: StructuredInput|"));
+
+    project
+        .cargo_fuzz()
+        .arg("generate")
+        .arg("generated_without_schema")
+        .assert()
+        .success();
+    let generated =
+        fs::read_to_string(project.fuzz_target_path("generated_without_schema")).unwrap();
+    assert!(generated.contains("struct StructuredInput"));
+
+    project
+        .cargo_fuzz()
+        .arg("run")
+        .arg("--sanitizer=none")
+        .arg("structured_input")
+        .arg("--")
+        .arg("-runs=64")
+        .assert()
+        .stderr(predicate::str::contains("Done 64 runs"))
+        .success();
+}
+
+#[test]
+fn run_imported_dictionary_is_passed_to_libfuzzer() {
+    let project = project("run_dictionary_compat")
+        .with_fuzz()
+        .fuzz_target(
+            "dict_compat",
+            r#"
+                #![no_main]
+                use libfuzzer_sys::fuzz_target;
+
+                fuzz_target!(|_data: &[u8]| {
+                    let args: Vec<String> = std::env::args().collect();
+                    assert!(
+                        args.iter().any(|arg| {
+                            arg.starts_with("-dict=") && arg.ends_with("dict_compat.dict")
+                        }),
+                        "libFuzzer did not receive dictionary argument: {args:?}"
+                    );
+                });
+            "#,
+        )
+        .file("dictionary.txt", "alpha\nbeta\n")
+        .build();
+
+    project
+        .cargo_fuzz()
+        .arg("run")
+        .arg("--sanitizer=none")
+        .arg("dict_compat")
+        .arg("--import-dict")
+        .arg("dictionary.txt")
+        .arg("--")
+        .arg("-runs=1")
+        .assert()
+        .success();
+
+    assert!(project
+        .fuzz_dir()
+        .join("dictionaries")
+        .join("dict_compat.dict")
+        .is_file());
+}
+
+#[test]
+fn compare_coverage_accepts_three_crate_reports() {
+    let reports = [
+        (
+            "route_lite",
+            "baseline",
+            r#"{"data":[{"totals":{"lines":{"count":100,"covered":40},"regions":{"count":50,"covered":20}}}]}"#,
+        ),
+        (
+            "kv_record",
+            "dictionary",
+            r#"{"data":[{"totals":{"lines":{"count":120,"covered":84},"regions":{"count":60,"covered":48}}}]}"#,
+        ),
+        (
+            "tag_lite",
+            "structured",
+            r#"{"data":[{"totals":{"lines":{"count":140,"covered":126},"regions":{"count":70,"covered":63}}}]}"#,
+        ),
+    ];
+
+    let project = project("compare_coverage_cli").build();
+    let mut command = project.cargo_fuzz();
+    command.args(["compare-coverage", "--expect-three-crates"]);
+
+    for (index, (crate_name, strategy, json)) in reports.iter().enumerate() {
+        let path = project.root().join(format!("report-{index}.json"));
+        fs::write(&path, json).unwrap();
+        command
+            .arg("--report")
+            .arg(format!("{crate_name}:{strategy}:{}", path.display()));
+    }
+
+    command.assert().success().stdout(
+        predicate::str::contains("route_lite")
+            .and(predicate::str::contains("kv_record"))
+            .and(predicate::str::contains("tag_lite"))
+            .and(predicate::str::contains("90.0%")),
+    );
+}
+
+#[test]
+fn init_structured_creates_arbitrary_target() {
+    let project = project("init_structured").build();
+    project
+        .cargo_fuzz()
+        .arg("init")
+        .arg("--fuzzing-workspace=true")
+        .arg("--structured")
+        .assert()
+        .success();
+
+    let code = fs::read_to_string(project.fuzz_target_path("fuzz_target_1")).unwrap();
+    assert!(code.contains("struct StructuredInput"));
+    assert!(code.contains("impl<'a> Arbitrary<'a>"));
+}
+
+#[test]
+fn committed_three_crate_coverage_comparison_is_well_formed() {
+    let csv_path = Path::new("benchmarks")
+        .join("coverage-compare")
+        .join("coverage-comparison.csv");
+    let csv = fs::read_to_string(&csv_path)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", csv_path.display()));
+
+    let mut crates = std::collections::BTreeSet::new();
+    let mut line_coverage = std::collections::BTreeMap::new();
+    let mut rows = 0;
+
+    for line in csv.lines().skip(1).filter(|line| !line.is_empty()) {
+        let fields: Vec<&str> = line.split(',').collect();
+        assert_eq!(fields.len(), 8, "unexpected CSV row: {line}");
+        let crate_name = fields[0];
+        let strategy = fields[1];
+        let percent: f64 = fields[5].parse().unwrap();
+        crates.insert(crate_name.to_owned());
+        line_coverage.insert((crate_name.to_owned(), strategy.to_owned()), percent);
+        rows += 1;
+    }
+
+    assert!(crates.len() >= 3, "expected three crates, got {crates:?}");
+    assert_eq!(
+        rows, 9,
+        "expected three strategies for each of three crates"
+    );
+
+    for crate_name in ["route_lite", "kv_record", "tag_lite"] {
+        let baseline = line_coverage[&(crate_name.to_owned(), "baseline".to_owned())];
+        let dictionary = line_coverage[&(crate_name.to_owned(), "dictionary".to_owned())];
+        let structured = line_coverage[&(crate_name.to_owned(), "structured".to_owned())];
+        assert!(
+            dictionary >= baseline,
+            "{crate_name}: dictionary coverage {dictionary} < baseline {baseline}"
+        );
+        assert!(
+            structured > baseline,
+            "{crate_name}: structured coverage {structured} <= baseline {baseline}"
+        );
+    }
+}

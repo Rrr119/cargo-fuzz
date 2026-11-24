@@ -10,9 +10,12 @@ use clap::Parser;
 
 #[macro_use]
 mod templates;
+mod coverage_compare;
+mod dictionary;
 mod options;
 mod project;
 mod rustc_version;
+mod structured;
 mod utils;
 
 static FUZZ_TARGETS_DIR_OLD: &str = "fuzzers";
@@ -109,6 +112,25 @@ enum Command {
     /// Add a new fuzz target
     Add(options::Add),
 
+    /// Import dictionaries or inspect project dictionaries
+    #[command(visible_alias = "dictionary", aliases = ["dictionaries"])]
+    Dict(options::Dictionary),
+
+    /// Import a libFuzzer/AFL dictionary (alias for `cargo fuzz dict import`)
+    #[command(name = "import-dict", aliases = ["import-dictionary", "dict-import"])]
+    ImportDict(options::ImportDict),
+
+    /// Generate structured schemas, seeds, and targets
+    #[command(
+        visible_alias = "gen",
+        aliases = ["structured", "generate-seeds", "generate-input"]
+    )]
+    Generate(options::Generate),
+
+    /// Compare LLVM coverage summaries from multiple crates or strategies
+    #[command(aliases = ["coverage-compare", "compare"])]
+    CompareCoverage(options::CompareCoverage),
+
     #[command(
         help_template(LONG_ABOUT_TEMPLATE),
         before_help(BUILD_BEFORE_HELP),
@@ -154,6 +176,10 @@ impl RunCommand for Command {
         match self {
             Command::Init(x) => x.run_command(),
             Command::Add(x) => x.run_command(),
+            Command::Dict(x) => x.run_command(),
+            Command::ImportDict(x) => x.run_command(),
+            Command::Generate(x) => x.run_command(),
+            Command::CompareCoverage(x) => x.run_command(),
             Command::Build(x) => x.run_command(),
             Command::Check(x) => x.run_command(),
             Command::List(x) => x.run_command(),

@@ -2,16 +2,30 @@ mod add;
 mod build;
 mod check;
 mod cmin;
+mod compare;
 mod coverage;
+mod dictionary;
 mod fmt;
+mod generate;
 mod init;
 mod list;
 mod run;
 mod tmin;
 
 pub use self::{
-    add::Add, build::Build, check::Check, cmin::Cmin, coverage::Coverage, fmt::Fmt, init::Init,
-    list::List, run::Run, tmin::Tmin,
+    add::Add,
+    build::Build,
+    check::Check,
+    cmin::Cmin,
+    compare::CompareCoverage,
+    coverage::Coverage,
+    dictionary::{Dictionary, ImportDict},
+    fmt::Fmt,
+    generate::Generate,
+    init::Init,
+    list::List,
+    run::Run,
+    tmin::Tmin,
 };
 
 use anyhow::{bail, Error, Result};
@@ -278,6 +292,31 @@ impl stdfmt::Display for FuzzDirWrapper {
 
         Ok(())
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Parser)]
+pub struct DictionaryOptions {
+    /// Use this libFuzzer/AFL dictionary for the run
+    #[arg(
+        long = "dict",
+        alias = "dictionary",
+        aliases = ["dictionary-file", "dict-file"],
+        value_name = "PATH_OR_NAME"
+    )]
+    pub dictionary: Option<PathBuf>,
+
+    /// Import a dictionary into `fuzz/dictionaries/<target>.dict` before running
+    #[arg(
+        long = "import-dict",
+        alias = "import-dictionary",
+        aliases = ["dictionary-import", "import-dictionary-file"],
+        value_name = "PATH"
+    )]
+    pub import_dictionaries: Vec<PathBuf>,
+
+    /// Do not automatically load `fuzz/dictionaries/<target>.dict`
+    #[arg(long)]
+    pub no_default_dict: bool,
 }
 
 #[derive(Clone, Debug)]

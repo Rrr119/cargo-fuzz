@@ -1,0 +1,22 @@
+name = "TagInput"
+template = "<html><head><title>{title}</title></head><body><header id=\"top\" class=\"{klass}\"></header><main><section id=\"main\"><{container} class=\"{klass}\"><a href=\"{href}\">link</a><img src=\"{src}\" alt=\"alt\"/></{container}><table><tr><td>cell</td></tr></table></section></main></body></html>"
+
+[[fields]]
+name = "title"
+choices = ["Coverage", "Report", "Tags"]
+
+[[fields]]
+name = "klass"
+choices = ["container", "active", "report"]
+
+[[fields]]
+name = "container"
+choices = ["div", "section", "article"]
+
+[[fields]]
+name = "href"
+choices = ["https://example.test", "/local", "#top"]
+
+[[fields]]
+name = "src"
+choices = ["/img/a.png", "https://example.test/a.png", "data:image/png"]

@@ -22,6 +22,10 @@ pub struct Init {
     /// Options: libfuzzer, libafl
     pub fuzz_engine: FuzzEngine,
 
+    /// Make the initial target a structured `Arbitrary` input target
+    #[arg(long)]
+    pub structured: bool,
+
     #[command(flatten)]
     pub fuzz_dir_wrapper: FuzzDirWrapper,
 }

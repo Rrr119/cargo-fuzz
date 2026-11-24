@@ -4,7 +4,15 @@ Released YYYY-MM-DD.
 
 ### Added
 
-* TODO (or remove section if none)
+* Added `cargo fuzz dict import` and automatic `fuzz/dictionaries/<target>.dict`
+  loading, plus `--dict` and `--import-dict` run flags that map to libFuzzer's
+  native `-dict` option.
+* Added schema-driven structured seed generation with
+  `cargo fuzz generate seeds`, structured `Arbitrary` target generation, and
+  `cargo fuzz add --structured`.
+* Added `cargo fuzz compare-coverage` for Markdown/CSV summaries of multiple
+  LLVM coverage reports, plus a reproducible three-crate benchmark under
+  `benchmarks/coverage-compare`.
 
 ### Changed
 

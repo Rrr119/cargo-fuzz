@@ -1,0 +1,30 @@
+name = "KvInput"
+template = "[{section}]\n{key1}={value1};{key2}={value2};{key3}={value3};\n"
+
+[[fields]]
+name = "section"
+choices = ["database", "server", "cache", "tls"]
+
+[[fields]]
+name = "key1"
+choices = ["host", "driver", "enabled", "timeout"]
+
+[[fields]]
+name = "value1"
+choices = ["localhost", "postgres", "true", "30"]
+
+[[fields]]
+name = "key2"
+choices = ["port", "retries", "ttl", "debug"]
+
+[[fields]]
+name = "value2"
+choices = ["5432", "3", "60", "false"]
+
+[[fields]]
+name = "key3"
+choices = ["user", "password", "name", "enabled"]
+
+[[fields]]
+name = "value3"
+choices = ["fuzz", "secret", "cache", "true"]

@@ -30,6 +30,47 @@ or use an independent workspace. If latter is desired, you can use
 
 Create a new fuzzing target!
 
+Use `cargo fuzz add <target> --structured` to generate an `Arbitrary`-based
+structured input target.
+
+### Dictionaries
+
+Import an AFL/libFuzzer dictionary, word list, or directory:
+
+```sh
+cargo fuzz dict import ./path/to/sql.dict my_target
+cargo fuzz dict list
+```
+
+The imported dictionary is stored at
+`fuzz/dictionaries/<target>.dict` and automatically passed to libFuzzer as
+`-dict=<absolute path>` by `cargo fuzz run my_target`. Use `--dict <path-or-name>`
+for a one-off dictionary and `--no-default-dict` to disable automatic loading.
+The old workflow remains available through passthrough arguments:
+`cargo fuzz run my_target -- -dict=./my.dict`.
+
+### Structured input generation
+
+Generate deterministic corpus seeds from a small TOML schema:
+
+```sh
+cargo fuzz generate seeds my_target --schema fuzz/schemas/input.toml --count 32
+cargo fuzz generate target my_target --schema fuzz/schemas/input.toml
+```
+
+Schemas describe fields (`bool`, `integer`, `float`, `string`, `choices`,
+`tokens`, or `constant`) and an optional `template`. Without a template, seeds
+are rendered as JSON objects. `generate target` creates a hand-written
+`Arbitrary` implementation backed by `libfuzzer-sys`'s re-exported `arbitrary`
+crate, so existing libFuzzer targets and corpora remain compatible.
+
+### Coverage comparison
+
+`cargo fuzz compare-coverage` converts multiple `llvm-cov export
+--summary-only` reports into one Markdown or CSV table. A reproducible
+three-crate baseline/dictionary/structured comparison lives in
+[`benchmarks/coverage-compare`](benchmarks/coverage-compare/README.md).
+
 ### `cargo fuzz run <target>`
 
 Run a fuzzing target and find bugs!

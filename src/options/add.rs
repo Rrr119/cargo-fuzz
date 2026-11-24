@@ -10,6 +10,10 @@ pub struct Add {
 
     /// Name of the new fuzz target
     pub target: String,
+
+    /// Generate a structured `Arbitrary` input target instead of `&[u8]`
+    #[arg(long)]
+    pub structured: bool,
 }
 
 impl RunCommand for Add {

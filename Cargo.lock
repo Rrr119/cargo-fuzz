@@ -127,6 +127,7 @@ dependencies = [
  "predicates",
  "rayon",
  "rustc_version",
+ "serde_json",
  "tempfile",
  "toml",
 ]

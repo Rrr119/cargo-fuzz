@@ -1,0 +1,23 @@
+name = "RouteInput"
+template = "{method} {path} HTTP/1.1\n"
+
+[[fields]]
+name = "method"
+choices = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
+
+[[fields]]
+name = "path"
+choices = [
+  "/health",
+  "/users",
+  "/users/42",
+  "/users/42/details",
+  "/users/active",
+  "/orders",
+  "/orders/7/reports",
+  "/items/archive",
+  "/admin/reports",
+  "/users?page=1&limit=20",
+  "/orders?format=csv",
+  "/items?format=json&sort=id"
+]

@@ -16,6 +16,14 @@ use std::{
 
 const DEFAULT_FUZZ_DIR: &str = "fuzz";
 
+fn dictionary_libfuzzer_arg(path: &Path) -> Result<ffi::OsString> {
+    let canonical = fs::canonicalize(path)
+        .with_context(|| format!("dictionary does not exist: {}", path.display()))?;
+    let mut arg = ffi::OsString::from("-dict=");
+    arg.push(canonical);
+    Ok(arg)
+}
+
 pub struct FuzzProject {
     /// The project with fuzz targets
     fuzz_dir: PathBuf,
@@ -84,7 +92,7 @@ impl FuzzProject {
             .with_context(|| format!("failed to write to {}", gitignore.display()))?;
 
         project
-            .create_target_template(&init.target, &manifest)
+            .create_target_template(&init.target, &manifest, init.structured)
             .with_context(|| {
                 format!(
                     "could not create template file for target {:?}",
@@ -106,12 +114,48 @@ impl FuzzProject {
         // Create corpus and artifact directories for the newly added target
         self.corpus_for(&add.target)?;
         self.artifacts_for(&add.target)?;
-        self.create_target_template(&add.target, manifest)
+        self.create_target_template(&add.target, manifest, add.structured)
             .with_context(|| format!("could not add target {:?}", add.target))
     }
 
+    /// Write a generated target and register its `[[bin]]` entry when needed.
+    pub fn write_generated_target(
+        &self,
+        target: &str,
+        contents: &str,
+        overwrite: bool,
+    ) -> Result<PathBuf> {
+        let target_path = self.target_path(target);
+        fs::create_dir_all(self.fuzz_targets_dir())
+            .context("ensuring that `fuzz_targets` directory exists failed")?;
+
+        if target_path.exists() && !overwrite {
+            bail!(
+                "target {} already exists; pass --force to overwrite",
+                target_path.display()
+            );
+        }
+        fs::write(&target_path, contents)
+            .with_context(|| format!("could not write target at {}", target_path.display()))?;
+
+        let manifest = self.manifest()?;
+        let registered = collect_targets(&manifest).iter().any(|name| name == target);
+        if !registered {
+            let mut cargo = fs::OpenOptions::new()
+                .append(true)
+                .open(self.manifest_path())?;
+            cargo.write_fmt(toml_bin_template!(target))?;
+        }
+        Ok(target_path)
+    }
+
     /// Add a new fuzz target script with a given name
-    fn create_target_template(&self, target: &str, manifest: &Manifest) -> Result<()> {
+    fn create_target_template(
+        &self,
+        target: &str,
+        manifest: &Manifest,
+        structured: bool,
+    ) -> Result<()> {
         let target_path = self.target_path(target);
 
         // If the user manually created a fuzz project, but hasn't created any
@@ -126,7 +170,18 @@ impl FuzzProject {
             .create_new(true)
             .open(&target_path)
             .with_context(|| format!("could not create target script file at {:?}", target_path))?;
-        script.write_fmt(target_template!(manifest.edition))?;
+        if structured {
+            let mut code = crate::structured::default_schema().arbitrary_target();
+            if matches!(manifest.edition.as_deref(), None | Some("2015")) {
+                code = code.replace(
+                    "#![no_main]\n",
+                    "#![no_main]\n\nextern crate libfuzzer_sys;\n",
+                );
+            }
+            script.write_all(code.as_bytes())?;
+        } else {
+            script.write_fmt(target_template!(manifest.edition))?;
+        }
 
         let mut cargo = fs::OpenOptions::new()
             .append(true)
@@ -513,6 +568,10 @@ impl FuzzProject {
         self.exec_build(BuildMode::Build, &run.build, Some(&run.target))?;
         let mut cmd = self.cargo_run(&run.build, &run.target)?;
 
+        if let Some(dictionary) = self.prepare_run_dictionary(run)? {
+            cmd.arg(dictionary_libfuzzer_arg(&dictionary)?);
+        }
+
         for arg in &run.args {
             cmd.arg(arg);
         }
@@ -596,6 +655,47 @@ impl FuzzProject {
 
         eprintln!("{:─<80}\n", "");
         bail!("Fuzz target exited with {}", status)
+    }
+
+    fn prepare_run_dictionary(&self, run: &options::Run) -> Result<Option<PathBuf>> {
+        let dictionary = &run.dictionary;
+        let default_path = crate::dictionary::default_dictionary_path(self.fuzz_dir(), &run.target);
+
+        if !dictionary.import_dictionaries.is_empty() {
+            let mut entries = if default_path.exists() {
+                let text = fs::read_to_string(&default_path)
+                    .with_context(|| format!("failed to read {}", default_path.display()))?;
+                crate::dictionary::parse_dictionary(&text)?
+            } else {
+                Vec::new()
+            };
+
+            for source in &dictionary.import_dictionaries {
+                let imported = crate::dictionary::parse_source(
+                    source,
+                    crate::dictionary::DictionaryFormat::Auto,
+                )?;
+                entries = crate::dictionary::merge_entries(entries, imported);
+            }
+
+            if let Some(parent) = default_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(
+                &default_path,
+                crate::dictionary::serialize_dictionary(&entries),
+            )?;
+        }
+
+        if let Some(reference) = &dictionary.dictionary {
+            return crate::dictionary::resolve_dictionary(reference, self.fuzz_dir()).map(Some);
+        }
+
+        if !dictionary.no_default_dict && default_path.exists() {
+            return Ok(Some(default_path));
+        }
+
+        Ok(None)
     }
 
     pub fn exec_tmin(&self, tmin: &options::Tmin) -> Result<()> {

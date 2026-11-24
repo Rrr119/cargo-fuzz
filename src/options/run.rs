@@ -1,5 +1,5 @@
 use crate::{
-    options::{BuildOptions, FuzzDirWrapper},
+    options::{BuildOptions, DictionaryOptions, FuzzDirWrapper},
     project::FuzzProject,
     RunCommand,
 };
@@ -19,6 +19,9 @@ pub struct Run {
 
     #[command(flatten)]
     pub fuzz_dir_wrapper: FuzzDirWrapper,
+
+    #[command(flatten)]
+    pub dictionary: DictionaryOptions,
 
     #[arg(
         short,
